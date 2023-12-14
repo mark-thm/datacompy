@@ -16,7 +16,7 @@
 import sys
 from enum import Enum
 from itertools import chain
-from typing import Any, TextIO, List, Union, Tuple, Optional, Dict, Set
+from typing import Any, Dict, List, Optional, Set, TextIO, Tuple, Union
 
 try:
     import pyspark
@@ -467,7 +467,14 @@ class SparkCompare:
         where_cond = " OR ".join(
             ["A." + name + "_match= False" for name in self.columns_compared]
         )
-        mismatch_query = """SELECT * FROM matched_table A WHERE {}""".format(where_cond)
+
+        if where_cond == "":
+            mismatch_query = """SELECT * FROM matched_table A"""
+        else:
+            mismatch_query = """SELECT * FROM matched_table A WHERE {}""".format(
+                where_cond
+            )
+
         self._all_rows_mismatched = self.spark.sql(mismatch_query).orderBy(
             self._join_column_names  # type: ignore[arg-type]
         )
@@ -504,17 +511,20 @@ class SparkCompare:
         )
         match_dataframe.createOrReplaceTempView("matched_df")
 
-        where_cond = " AND ".join(
-            [
-                "A." + name + "=" + str(MatchType.MATCH.value)
-                for name in self.columns_compared
-            ]
-        )
-        match_query = (
-            r"""SELECT count(*) AS row_count FROM matched_df A WHERE {}""".format(
-                where_cond
+        if match_dataframe.isEmpty() or not match_dataframe.columns:
+            match_query = """SELECT count(*) AS row_count FROM matched_df A"""
+        else:
+            where_cond = " AND ".join(
+                [
+                    "A." + name + "=" + str(MatchType.MATCH.value)
+                    for name in self.columns_compared
+                ]
             )
-        )
+            match_query = (
+                r"""SELECT count(*) AS row_count FROM matched_df A WHERE {}""".format(
+                    where_cond
+                )
+            )
         all_rows_matched = self.spark.sql(match_query)
         all_rows_matched_head = all_rows_matched.head()
         matched_rows = (
@@ -543,6 +553,14 @@ class SparkCompare:
             *self.columns_compared
         )
 
+        if match_dataframe.isEmpty() or not match_dataframe.columns:
+            match_dataframe = self._get_or_create_joined_dataframe().select(
+                *self._join_column_names
+            )
+            temp_cols = self._join_column_names
+        else:
+            temp_cols = self.columns_compared
+
         def helper(c: str) -> "pyspark.sql.Column":
             # Create a predicate for each match type, comparing column values to the match type value
             predicates = [F.col(c) == k.value for k in MatchType]
@@ -554,11 +572,11 @@ class SparkCompare:
         # For each column, create a single tuple. This tuple's values correspond to the number of times
         # each match type appears in that column
         match_data_agg = match_dataframe.agg(
-            *[helper(col) for col in self.columns_compared]
+            *[helper(col) for col in temp_cols]
         ).collect()
         match_data = match_data_agg[0]
 
-        for c in self.columns_compared:
+        for c in temp_cols:
             self.columns_match_dict[c] = match_data[c]
 
     def _create_select_statement(self, name: str) -> str:
