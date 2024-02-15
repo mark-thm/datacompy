@@ -613,7 +613,6 @@ class Compare(BaseCompare):
         )
 
         # Column Matching
-        cnt_intersect = self.intersect_rows.shape[0]
         report += render(
             "column_comparison.txt",
             len([col for col in self.column_stats if col["unequal_cnt"] > 0]),
@@ -804,7 +803,7 @@ def columns_equal(
                     compare = pd.Series(
                         (col_1 == col_2) | (col_1.isnull() & col_2.isnull())
                     )
-            except:
+            except Exception:
                 # Blanket exception should just return all False
                 compare = pd.Series(False, index=col_1.index)
     compare.index = col_1.index
@@ -842,13 +841,13 @@ def compare_string_and_date_columns(
             (pd.to_datetime(obj_column) == date_column)
             | (obj_column.isnull() & date_column.isnull())
         )
-    except:
+    except Exception:
         try:
             return pd.Series(
                 (pd.to_datetime(obj_column, format="mixed") == date_column)
                 | (obj_column.isnull() & date_column.isnull())
             )
-        except:
+        except Exception:
             return pd.Series(False, index=col_1.index)
 
 
@@ -920,7 +919,7 @@ def calculate_max_diff(col_1: "pd.Series[Any]", col_2: "pd.Series[Any]") -> floa
     """
     try:
         return cast(float, (col_1.astype(float) - col_2.astype(float)).abs().max())
-    except:
+    except Exception:
         return 0.0
 
 
