@@ -479,8 +479,8 @@ def test_10k_rows():
     df2 = df2.with_columns(pl.col("b") + 0.1)
     compare_tol = PolarsCompare(df1, df2, ["a"], abs_tol=0.2)
     assert compare_tol.matches()
-    assert len(compare_tol.df1_unq_rows) == 0
-    assert len(compare_tol.df2_unq_rows) == 0
+    assert len(compare_tol.df1_unq_rows.collect()) == 0
+    assert len(compare_tol.df2_unq_rows.collect()) == 0
     assert compare_tol.intersect_columns() == {"a", "b", "c"}
     assert compare_tol.all_columns_match()
     assert compare_tol.all_rows_overlap()
@@ -488,8 +488,8 @@ def test_10k_rows():
 
     compare_no_tol = PolarsCompare(df1, df2, ["a"])
     assert not compare_no_tol.matches()
-    assert len(compare_no_tol.df1_unq_rows) == 0
-    assert len(compare_no_tol.df2_unq_rows) == 0
+    assert len(compare_no_tol.df1_unq_rows.collect()) == 0
+    assert len(compare_no_tol.df2_unq_rows.collect()) == 0
     assert compare_no_tol.intersect_columns() == {"a", "b", "c"}
     assert compare_no_tol.all_columns_match()
     assert compare_no_tol.all_rows_overlap()
@@ -634,7 +634,7 @@ def test_simple_dupes_two_fields():
     t = compare.report()
 
 
-def test_simple_dupes_one_field_two_vals():
+def test_simple_dupes_one_field_two_vals_same():
     df1 = pl.DataFrame([{"a": 1, "b": 2}, {"a": 1, "b": 0}])
     df2 = pl.DataFrame([{"a": 1, "b": 2}, {"a": 1, "b": 0}])
     compare = PolarsCompare(df1, df2, join_columns=["a"])
@@ -643,14 +643,14 @@ def test_simple_dupes_one_field_two_vals():
     t = compare.report()
 
 
-def test_simple_dupes_one_field_two_vals():
+def test_simple_dupes_one_field_two_vals_diff():
     df1 = pl.DataFrame([{"a": 1, "b": 2}, {"a": 1, "b": 0}])
     df2 = pl.DataFrame([{"a": 1, "b": 2}, {"a": 2, "b": 0}])
     compare = PolarsCompare(df1, df2, join_columns=["a"])
     assert not compare.matches()
-    assert len(compare.df1_unq_rows) == 1
-    assert len(compare.df2_unq_rows) == 1
-    assert len(compare.intersect_rows) == 1
+    assert len(compare.df1_unq_rows.collect()) == 1
+    assert len(compare.df2_unq_rows.collect()) == 1
+    assert len(compare.intersect_rows.collect()) == 1
     # Just render the report to make sure it renders.
     t = compare.report()
 
@@ -660,9 +660,9 @@ def test_simple_dupes_one_field_three_to_two_vals():
     df2 = pl.DataFrame([{"a": 1, "b": 2}, {"a": 1, "b": 0}])
     compare = PolarsCompare(df1, df2, join_columns=["a"])
     assert not compare.matches()
-    assert len(compare.df1_unq_rows) == 1
-    assert len(compare.df2_unq_rows) == 0
-    assert len(compare.intersect_rows) == 2
+    assert len(compare.df1_unq_rows.collect()) == 1
+    assert len(compare.df2_unq_rows.collect()) == 0
+    assert len(compare.intersect_rows.collect()) == 2
     # Just render the report to make sure it renders.
     t = compare.report()
 
@@ -883,7 +883,7 @@ def test_all_mismatch_not_ignore_matching_cols_no_cols_matching():
     df2 = pl.read_csv(io.StringIO(data2), separator=",")
     compare = PolarsCompare(df1, df2, "acct_id")
 
-    output = compare.all_mismatch()
+    output = compare.all_mismatch().collect()
     assert output.shape[0] == 4
     assert output.shape[1] == 9
 
@@ -944,7 +944,7 @@ def test_all_mismatch_not_ignore_matching_cols_some_cols_matching():
     df2 = pl.read_csv(io.StringIO(data2), separator=",")
     compare = PolarsCompare(df1, df2, "acct_id")
 
-    output = compare.all_mismatch()
+    output = compare.all_mismatch().collect()
     assert output.shape[0] == 4
     assert output.shape[1] == 9
 
@@ -1006,7 +1006,7 @@ def test_all_mismatch_ignore_matching_cols_some_cols_matching_diff_rows():
     df2 = pl.read_csv(io.StringIO(data2), separator=",")
     compare = PolarsCompare(df1, df2, "acct_id")
 
-    output = compare.all_mismatch(ignore_matching_cols=True)
+    output = compare.all_mismatch(ignore_matching_cols=True).collect()
 
     assert output.shape[0] == 4
     assert output.shape[1] == 5
@@ -1065,7 +1065,7 @@ def test_all_mismatch_ignore_matching_cols_some_cols_matching():
     df2 = pl.read_csv(io.StringIO(data2), separator=",")
     compare = PolarsCompare(df1, df2, "acct_id")
 
-    output = compare.all_mismatch(ignore_matching_cols=True)
+    output = compare.all_mismatch(ignore_matching_cols=True).collect()
 
     assert output.shape[0] == 4
     assert output.shape[1] == 5
@@ -1123,7 +1123,7 @@ def test_all_mismatch_ignore_matching_cols_no_cols_matching():
     df2 = pl.read_csv(io.StringIO(data2), separator=",")
     compare = PolarsCompare(df1, df2, "acct_id")
 
-    output = compare.all_mismatch()
+    output = compare.all_mismatch().collect()
     assert output.shape[0] == 4
     assert output.shape[1] == 9
 
@@ -1238,7 +1238,7 @@ def test_dupes_with_nulls():
     ],
 )
 def test_generate_id_within_group(dataframe, expected):
-    assert (generate_id_within_group(dataframe, ["a", "b"]) == expected).all()
+    assert (generate_id_within_group(dataframe.lazy(), ["a", "b"]) == expected).all()
 
 
 @pytest.mark.parametrize(
@@ -1252,7 +1252,7 @@ def test_generate_id_within_group(dataframe, expected):
 )
 def test_generate_id_within_group_valueerror(dataframe, message):
     with raises(ValueError, match=message):
-        generate_id_within_group(dataframe, ["a", "b"])
+        generate_id_within_group(dataframe.lazy(), ["a", "b"])
 
 
 def test_lower():
